@@ -1,17 +1,37 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 export function middleware(request: NextRequest) {
-  // Check if user is accessing protected routes
-  const protectedPaths = ["/dashboard", "/pdv", "/financeiro", "/estoque", "/relatorios"]
+  const protectedPaths = [
+    "/dashboard",
+    "/pdv",
+    "/financeiro",
+    "/produtos",
+    "/clientes",
+    "/fornecedores",
+    "/compras",
+    "/relatorios",
+    "/configuracoes",
+    "/mobile"
+  ]
+
   const isProtectedPath = protectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
 
   if (isProtectedPath) {
-    // In a real app, you would verify the Firebase token here
-    // For now, we'll redirect to login if no session cookie exists
-    const hasSession = request.cookies.has("firebase-session")
+    const token = request.cookies.get("firebase-token")?.value
 
-    if (!hasSession) {
-      return NextResponse.redirect(new URL("/login", request.url))
+    if (!token) {
+      const loginUrl = new URL("/login", request.url)
+      loginUrl.searchParams.set("redirect", request.nextUrl.pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+  }
+
+  if (request.nextUrl.pathname === "/login") {
+    const token = request.cookies.get("firebase-token")?.value
+    if (token) {
+      const redirectParam = request.nextUrl.searchParams.get("redirect")
+      const redirectUrl = redirectParam || "/dashboard"
+      return NextResponse.redirect(new URL(redirectUrl, request.url))
     }
   }
 
@@ -19,5 +39,17 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/pdv/:path*", "/financeiro/:path*", "/estoque/:path*", "/relatorios/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/pdv/:path*",
+    "/financeiro/:path*",
+    "/produtos/:path*",
+    "/clientes/:path*",
+    "/fornecedores/:path*",
+    "/compras/:path*",
+    "/relatorios/:path*",
+    "/configuracoes/:path*",
+    "/mobile/:path*",
+    "/login",
+  ],
 }
