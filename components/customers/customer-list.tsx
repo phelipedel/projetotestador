@@ -1,12 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Search, Plus, Edit, Trash2, Phone, Mail } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
+import { FirebaseStatus } from "@/components/ui/firebase-status"
 import type { Customer } from "@/types/database"
 
 interface CustomerListProps {
@@ -18,63 +22,102 @@ export function CustomerList({ onAddCustomer, onEditCustomer }: CustomerListProp
   const [customers, setCustomers] = useState<Customer[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchCustomers()
   }, [])
 
   const fetchCustomers = async () => {
+    console.log("[FIREBASE] Iniciando busca de clientes")
+    setLoading(true)
+
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado. Verifique as variáveis de ambiente.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
-      // Simulate API call - replace with actual API
-      const mockData: Customer[] = [
-        {
-          id: "1",
-          name: "João Silva",
-          email: "joao@email.com",
-          phone: "(11) 98765-4321",
-          document: "123.456.789-00",
-          address: {
-            street: "Rua das Flores",
-            number: "123",
-            neighborhood: "Centro",
-            city: "São Paulo",
-            state: "SP",
-            zipCode: "01234-567",
-          },
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          createdBy: "admin",
-        },
-        {
-          id: "2",
-          name: "Maria Santos",
-          email: "maria@email.com",
-          phone: "(11) 91234-5678",
-          document: "987.654.321-00",
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          createdBy: "admin",
-        },
-      ]
-      setCustomers(mockData)
-    } catch (error) {
-      console.error("Error fetching customers:", error)
+      console.log("[FIREBASE] Buscando coleção 'customers'")
+      const customersRef = collection(db, "customers")
+      const q = query(customersRef, orderBy("createdAt", "desc"))
+      const querySnapshot = await getDocs(q)
+
+      console.log(`[FIREBASE SUCCESS] ${querySnapshot.size} clientes encontrados`)
+
+      const customersData: Customer[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        console.log("[FIREBASE] Cliente:", doc.id, data)
+        customersData.push({
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Customer)
+      })
+
+      setCustomers(customersData)
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao buscar clientes:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+      console.error("[FIREBASE ERROR] Stack trace:", error.stack)
+
+      toast({
+        title: "Erro ao carregar clientes",
+        description: error.message || "Ocorreu um erro ao carregar os clientes.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este cliente?")) {
-      try {
-        // TODO: Implement delete API call
-        console.log("Deleting customer:", id)
-        setCustomers(customers.filter((c) => c.id !== id))
-      } catch (error) {
-        console.error("Error deleting customer:", error)
-      }
+    if (!confirm("Tem certeza que deseja excluir este cliente?")) {
+      return
+    }
+
+    console.log("[FIREBASE] Iniciando exclusão do cliente:", id)
+
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const customerRef = doc(db, "customers", id)
+      await deleteDoc(customerRef)
+      console.log("[FIREBASE SUCCESS] Cliente excluído com sucesso!")
+
+      setCustomers(customers.filter((c) => c.id !== id))
+
+      toast({
+        title: "Sucesso",
+        description: "Cliente excluído com sucesso!",
+      })
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao excluir cliente:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+
+      toast({
+        title: "Erro ao excluir cliente",
+        description: error.message || "Ocorreu um erro ao excluir o cliente.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -89,7 +132,10 @@ export function CustomerList({ onAddCustomer, onEditCustomer }: CustomerListProp
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Lista de Clientes</CardTitle>
+          <div className="flex items-center gap-4">
+            <CardTitle>Lista de Clientes</CardTitle>
+            <FirebaseStatus />
+          </div>
           <Button onClick={onAddCustomer}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Cliente

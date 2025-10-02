@@ -3,11 +3,14 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { useToast } from "@/hooks/use-toast"
 import type { Customer } from "@/types/database"
 
 interface AddCustomerModalProps {
@@ -33,6 +36,7 @@ export function AddCustomerModal({ isOpen, onClose, onSuccess, customer }: AddCu
     isActive: true,
   })
   const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     if (customer) {
@@ -72,13 +76,73 @@ export function AddCustomerModal({ isOpen, onClose, onSuccess, customer }: AddCu
     e.preventDefault()
     setLoading(true)
 
+    console.log("[FIREBASE] Iniciando salvar cliente:", formData)
+
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado. Verifique as variáveis de ambiente.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
-      // TODO: Implement API call
-      console.log("Saving customer:", formData)
+      const customerData = {
+        name: formData.name,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        document: formData.document || null,
+        address: {
+          street: formData.street || null,
+          number: formData.number || null,
+          complement: formData.complement || null,
+          neighborhood: formData.neighborhood || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          zipCode: formData.zipCode || null,
+        },
+        isActive: formData.isActive,
+        updatedAt: serverTimestamp(),
+      }
+
+      if (customer?.id) {
+        console.log("[FIREBASE] Atualizando cliente com ID:", customer.id)
+        const customerRef = doc(db, "customers", customer.id)
+        await updateDoc(customerRef, customerData)
+        console.log("[FIREBASE SUCCESS] Cliente atualizado com sucesso!")
+        toast({
+          title: "Sucesso",
+          description: "Cliente atualizado com sucesso!",
+        })
+      } else {
+        console.log("[FIREBASE] Criando novo cliente")
+        const docRef = await addDoc(collection(db, "customers"), {
+          ...customerData,
+          createdAt: serverTimestamp(),
+        })
+        console.log("[FIREBASE SUCCESS] Cliente criado com ID:", docRef.id)
+        toast({
+          title: "Sucesso",
+          description: "Cliente cadastrado com sucesso!",
+        })
+      }
+
       onSuccess()
       onClose()
-    } catch (error) {
-      console.error("Error saving customer:", error)
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao salvar cliente:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+      console.error("[FIREBASE ERROR] Stack trace:", error.stack)
+
+      toast({
+        title: "Erro ao salvar cliente",
+        description: error.message || "Ocorreu um erro ao salvar o cliente.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
