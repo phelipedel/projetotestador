@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { Search, Plus, Edit, Trash2, Phone, Mail } from "lucide-react"
+import { Search, Plus, CreditCard as Edit, Trash2, Phone, Mail } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { db, auth } from "@/lib/firebase"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, XCircle, Wifi, WifiOff } from "lucide-react"
+import { CircleCheck as CheckCircle2, Circle as XCircle, Wifi, WifiOff } from "lucide-react"
 
 export function FirebaseStatus() {
   const [isConnected, setIsConnected] = useState(false)
