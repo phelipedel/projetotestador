@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { Search, Plus, Edit, Trash2, Package, AlertTriangle } from "lucide-react"
+import { Search, Plus, CreditCard as Edit, Trash2, Package, TriangleAlert as AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
