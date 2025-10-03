@@ -3,12 +3,15 @@
 import type React from "react"
 
 import { useState } from "react"
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
 import type { Product } from "@/types/database"
 
 interface AddProductModalProps {
@@ -47,39 +50,76 @@ export function AddProductModal({ isOpen, onClose, onSuccess, product }: AddProd
     unit: product?.unit || "un",
   })
   const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    try {
-      const url = product ? `/api/products/${product.id}` : "/api/products"
-      const method = product ? "PUT" : "POST"
+    console.log("[FIREBASE] Iniciando salvar produto:", formData)
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          price: Number.parseFloat(formData.price),
-          costPrice: Number.parseFloat(formData.costPrice),
-          stock: Number.parseInt(formData.stock),
-          minStock: Number.parseInt(formData.minStock),
-        }),
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado. Verifique as variáveis de ambiente.",
+        variant: "destructive",
       })
+      setLoading(false)
+      return
+    }
 
-      if (response.ok) {
-        onSuccess()
-        onClose()
-        resetForm()
-      } else {
-        throw new Error("Erro ao salvar produto")
+    try {
+      const productData = {
+        name: formData.name,
+        description: formData.description || null,
+        sku: formData.sku,
+        barcode: formData.barcode || null,
+        category: formData.category,
+        price: Number.parseFloat(formData.price),
+        costPrice: formData.costPrice ? Number.parseFloat(formData.costPrice) : 0,
+        stock: Number.parseInt(formData.stock),
+        minStock: Number.parseInt(formData.minStock),
+        unit: formData.unit,
+        updatedAt: serverTimestamp(),
       }
-    } catch (error) {
-      console.error("Error saving product:", error)
-      alert("Erro ao salvar produto")
+
+      if (product?.id) {
+        console.log("[FIREBASE] Atualizando produto com ID:", product.id)
+        const productRef = doc(db, "products", product.id)
+        await updateDoc(productRef, productData)
+        console.log("[FIREBASE SUCCESS] Produto atualizado com sucesso!")
+        toast({
+          title: "Sucesso",
+          description: "Produto atualizado com sucesso!",
+        })
+      } else {
+        console.log("[FIREBASE] Criando novo produto")
+        const docRef = await addDoc(collection(db, "products"), {
+          ...productData,
+          createdAt: serverTimestamp(),
+        })
+        console.log("[FIREBASE SUCCESS] Produto criado com ID:", docRef.id)
+        toast({
+          title: "Sucesso",
+          description: "Produto cadastrado com sucesso!",
+        })
+      }
+
+      onSuccess()
+      onClose()
+      resetForm()
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao salvar produto:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+      console.error("[FIREBASE ERROR] Stack trace:", error.stack)
+
+      toast({
+        title: "Erro ao salvar produto",
+        description: error.message || "Ocorreu um erro ao salvar o produto.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }

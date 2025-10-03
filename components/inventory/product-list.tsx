@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Search, Plus, Edit, Trash2, Package, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useToast } from "@/hooks/use-toast"
+import { FirebaseStatus } from "@/components/ui/firebase-status"
 import type { Product } from "@/types/database"
 
 interface ProductListProps {
@@ -24,6 +28,7 @@ export function ProductList({ onAddProduct, onEditProduct }: ProductListProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [stockFilter, setStockFilter] = useState<string>("all")
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchProducts()
@@ -34,14 +39,52 @@ export function ProductList({ onAddProduct, onEditProduct }: ProductListProps) {
   }, [products, searchTerm, categoryFilter, stockFilter])
 
   const fetchProducts = async () => {
+    console.log("[FIREBASE] Iniciando busca de produtos")
+    setLoading(true)
+
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado. Verifique as variáveis de ambiente.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
-      const response = await fetch("/api/products")
-      if (response.ok) {
-        const data = await response.json()
-        setProducts(data)
-      }
-    } catch (error) {
-      console.error("Error fetching products:", error)
+      console.log("[FIREBASE] Buscando coleção 'products'")
+      const productsRef = collection(db, "products")
+      const q = query(productsRef, orderBy("createdAt", "desc"))
+      const querySnapshot = await getDocs(q)
+
+      console.log(`[FIREBASE SUCCESS] ${querySnapshot.size} produtos encontrados`)
+
+      const productsData: Product[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        console.log("[FIREBASE] Produto:", doc.id, data)
+        productsData.push({
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Product)
+      })
+
+      setProducts(productsData)
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao buscar produtos:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+      console.error("[FIREBASE ERROR] Stack trace:", error.stack)
+
+      toast({
+        title: "Erro ao carregar produtos",
+        description: error.message || "Ocorreu um erro ao carregar os produtos.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -92,6 +135,47 @@ export function ProductList({ onAddProduct, onEditProduct }: ProductListProps) {
     }
   }
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este produto?")) {
+      return
+    }
+
+    console.log("[FIREBASE] Iniciando exclusão do produto:", id)
+
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const productRef = doc(db, "products", id)
+      await deleteDoc(productRef)
+      console.log("[FIREBASE SUCCESS] Produto excluído com sucesso!")
+
+      setProducts(products.filter((p) => p.id !== id))
+
+      toast({
+        title: "Sucesso",
+        description: "Produto excluído com sucesso!",
+      })
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao excluir produto:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+
+      toast({
+        title: "Erro ao excluir produto",
+        description: error.message || "Ocorreu um erro ao excluir o produto.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const getStockStatus = (product: Product) => {
     if (product.stock === 0) {
       return { label: "Sem estoque", variant: "destructive" as const, icon: AlertTriangle }
@@ -115,9 +199,12 @@ export function ProductList({ onAddProduct, onEditProduct }: ProductListProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Catálogo de Produtos</CardTitle>
-            <CardDescription>Gerencie seu inventário de produtos</CardDescription>
+          <div className="flex items-center gap-4">
+            <div>
+              <CardTitle>Catálogo de Produtos</CardTitle>
+              <CardDescription>Gerencie seu inventário de produtos</CardDescription>
+            </div>
+            <FirebaseStatus />
           </div>
           <div className="flex gap-2">
             {selectedProducts.length > 0 && (
@@ -257,7 +344,12 @@ export function ProductList({ onAddProduct, onEditProduct }: ProductListProps) {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-destructive"
+                            onClick={() => handleDelete(product.id)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>

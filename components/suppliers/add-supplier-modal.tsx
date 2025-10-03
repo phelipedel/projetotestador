@@ -3,11 +3,14 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { useToast } from "@/hooks/use-toast"
 import type { Supplier } from "@/types/database"
 
 interface AddSupplierModalProps {
@@ -33,6 +36,7 @@ export function AddSupplierModal({ isOpen, onClose, onSuccess, supplier }: AddSu
     isActive: true,
   })
   const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     if (supplier) {
@@ -72,12 +76,73 @@ export function AddSupplierModal({ isOpen, onClose, onSuccess, supplier }: AddSu
     e.preventDefault()
     setLoading(true)
 
+    console.log("[FIREBASE] Iniciando salvar fornecedor:", formData)
+
+    if (!db) {
+      console.error("[FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado. Verifique as variáveis de ambiente.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
-      console.log("Saving supplier:", formData)
+      const supplierData = {
+        name: formData.name,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        document: formData.document,
+        address: {
+          street: formData.street || null,
+          number: formData.number || null,
+          complement: formData.complement || null,
+          neighborhood: formData.neighborhood || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          zipCode: formData.zipCode || null,
+        },
+        isActive: formData.isActive,
+        updatedAt: serverTimestamp(),
+      }
+
+      if (supplier?.id) {
+        console.log("[FIREBASE] Atualizando fornecedor com ID:", supplier.id)
+        const supplierRef = doc(db, "suppliers", supplier.id)
+        await updateDoc(supplierRef, supplierData)
+        console.log("[FIREBASE SUCCESS] Fornecedor atualizado com sucesso!")
+        toast({
+          title: "Sucesso",
+          description: "Fornecedor atualizado com sucesso!",
+        })
+      } else {
+        console.log("[FIREBASE] Criando novo fornecedor")
+        const docRef = await addDoc(collection(db, "suppliers"), {
+          ...supplierData,
+          createdAt: serverTimestamp(),
+        })
+        console.log("[FIREBASE SUCCESS] Fornecedor criado com ID:", docRef.id)
+        toast({
+          title: "Sucesso",
+          description: "Fornecedor cadastrado com sucesso!",
+        })
+      }
+
       onSuccess()
       onClose()
-    } catch (error) {
-      console.error("Error saving supplier:", error)
+    } catch (error: any) {
+      console.error("[FIREBASE ERROR] Erro ao salvar fornecedor:", error)
+      console.error("[FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[FIREBASE ERROR] Mensagem do erro:", error.message)
+      console.error("[FIREBASE ERROR] Stack trace:", error.stack)
+
+      toast({
+        title: "Erro ao salvar fornecedor",
+        description: error.message || "Ocorreu um erro ao salvar o fornecedor.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
