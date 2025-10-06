@@ -1,12 +1,16 @@
 "use client"
 
 import { useState } from "react"
+import { collection, addDoc, doc, writeBatch, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { generateReceipt } from "@/lib/export-utils"
 import { CreditCard, Banknote, Smartphone, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/hooks/use-toast"
 import type { CartItem } from "@/hooks/use-pdv"
 import type { Customer } from "@/types/database"
 
@@ -32,16 +36,96 @@ export function PaymentModal({ isOpen, onClose, cart, customer, total, discount,
   const [selectedPayment, setSelectedPayment] = useState("")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   const handleConfirm = async () => {
     if (!selectedPayment) return
 
+    console.log("[PDV FIREBASE] Iniciando finalização de venda")
     setLoading(true)
+
+    if (!db) {
+      console.error("[PDV FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
+      const batch = writeBatch(db)
+
+      const saleRef = doc(collection(db, "sales"))
+      const saleData = {
+        items: cart.map((item) => ({
+          productId: item.id,
+          productName: item.productName,
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total,
+        })),
+        customerId: customer?.id || null,
+        customerName: customer?.name || "Cliente não informado",
+        subtotal: total + discount,
+        discount: discount,
+        total: total,
+        paymentMethod: selectedPayment,
+        notes: notes || null,
+        createdAt: serverTimestamp(),
+        status: "completed",
+      }
+      batch.set(saleRef, saleData)
+      console.log("[PDV FIREBASE] Venda adicionada ao batch")
+
+      const transactionRef = doc(collection(db, "financial_transactions"))
+      const transactionData = {
+        type: "receita",
+        category: "Vendas",
+        description: `Venda PDV #${saleRef.id.substring(0, 8).toUpperCase()}`,
+        amount: total,
+        date: serverTimestamp(),
+        paymentMethod: selectedPayment,
+        saleId: saleRef.id,
+        status: "pago",
+      }
+      batch.set(transactionRef, transactionData)
+      console.log("[PDV FIREBASE] Transação financeira adicionada ao batch")
+
+      await batch.commit()
+      console.log("[PDV FIREBASE SUCCESS] Venda e transação salvas com sucesso!")
+
+      toast({
+        title: "Venda finalizada!",
+        description: "Venda registrada com sucesso.",
+      })
+
+      const receiptData = {
+        items: cart.map((item) => ({
+          name: item.productName,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        total: total,
+        paymentMethod: paymentMethods.find((m) => m.id === selectedPayment)?.name || selectedPayment,
+      }
+      generateReceipt(receiptData, saleRef.id)
+
       await onConfirmSale(selectedPayment, notes)
       onClose()
-    } catch (error) {
-      console.error("Error confirming sale:", error)
+    } catch (error: any) {
+      console.error("[PDV FIREBASE ERROR] Erro ao finalizar venda:", error)
+      console.error("[PDV FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[PDV FIREBASE ERROR] Mensagem do erro:", error.message)
+      console.error("[PDV FIREBASE ERROR] Stack trace:", error.stack)
+
+      toast({
+        title: "Erro ao finalizar venda",
+        description: error.message || "Ocorreu um erro ao processar a venda.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }

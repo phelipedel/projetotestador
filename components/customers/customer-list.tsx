@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { Search, Plus, CreditCard as Edit, Trash2, Phone, Mail } from "lucide-react"
+import { Search, Plus, CreditCard as Edit, Trash2, Phone, Mail, FileDown, FileSpreadsheet } from "lucide-react"
+import { exportToPdf, exportToCsv } from "@/lib/export-utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -128,6 +129,57 @@ export function CustomerList({ onAddCustomer, onEditCustomer }: CustomerListProp
       customer.document?.includes(searchTerm),
   )
 
+  const handleExportPdf = () => {
+    try {
+      const headers = ["Nome", "Email", "Telefone", "Documento", "Status"]
+      const data = filteredCustomers.map((c) => [
+        c.name,
+        c.email || "-",
+        c.phone || "-",
+        c.document || "-",
+        c.isActive ? "Ativo" : "Inativo",
+      ])
+      exportToPdf(headers, data, "Relatório de Clientes")
+      toast({
+        title: "Sucesso",
+        description: "Relatório PDF gerado com sucesso!",
+      })
+    } catch (error: any) {
+      console.error("[EXPORT ERROR]", error)
+      toast({
+        title: "Erro ao exportar",
+        description: "Não foi possível gerar o relatório PDF.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleExportCsv = () => {
+    try {
+      const data = filteredCustomers.map((c) => ({
+        Nome: c.name,
+        Email: c.email || "-",
+        Telefone: c.phone || "-",
+        Documento: c.document || "-",
+        Cidade: c.address?.city || "-",
+        Estado: c.address?.state || "-",
+        Status: c.isActive ? "Ativo" : "Inativo",
+      }))
+      exportToCsv(data, "relatorio_clientes")
+      toast({
+        title: "Sucesso",
+        description: "Relatório CSV/Excel gerado com sucesso!",
+      })
+    } catch (error: any) {
+      console.error("[EXPORT ERROR]", error)
+      toast({
+        title: "Erro ao exportar",
+        description: "Não foi possível gerar o relatório CSV.",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -136,10 +188,20 @@ export function CustomerList({ onAddCustomer, onEditCustomer }: CustomerListProp
             <CardTitle>Lista de Clientes</CardTitle>
             <FirebaseStatus />
           </div>
-          <Button onClick={onAddCustomer}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleExportPdf} variant="outline" size="sm">
+              <FileDown className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
+            <Button onClick={handleExportCsv} variant="outline" size="sm">
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              CSV/Excel
+            </Button>
+            <Button onClick={onAddCustomer}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Cliente
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
