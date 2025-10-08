@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Package, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -31,25 +33,73 @@ export function InventoryOverview() {
   }, [])
 
   const fetchInventoryMetrics = async () => {
+    console.log("[INVENTORY FIREBASE] Buscando métricas de estoque")
+
+    if (!db) {
+      console.error("[INVENTORY FIREBASE ERROR] Firebase não configurado")
+      setLoading(false)
+      return
+    }
+
     try {
-      // Simulate API call - replace with actual API
-      const mockData: InventoryMetrics = {
-        totalProducts: 1247,
-        totalStock: 8934,
-        lowStockItems: 23,
-        outOfStockItems: 5,
-        totalValue: 234567.89,
-        topCategories: [
-          { name: "Eletrônicos", count: 342, percentage: 27.4 },
-          { name: "Roupas", count: 298, percentage: 23.9 },
-          { name: "Casa & Jardim", count: 187, percentage: 15.0 },
-          { name: "Esportes", count: 156, percentage: 12.5 },
-          { name: "Livros", count: 134, percentage: 10.7 },
-        ],
-      }
-      setMetrics(mockData)
-    } catch (error) {
-      console.error("Error fetching inventory metrics:", error)
+      const productsRef = collection(db, "products")
+      const snapshot = await getDocs(productsRef)
+
+      let totalStock = 0
+      let lowStockItems = 0
+      let outOfStockItems = 0
+      let totalValue = 0
+      const categoryCount: Record<string, number> = {}
+
+      snapshot.forEach((doc) => {
+        const product = doc.data()
+        const stock = product.stock || 0
+        const minStock = product.minStock || 5
+        const price = product.price || 0
+
+        totalStock += stock
+        totalValue += stock * price
+
+        if (stock === 0) {
+          outOfStockItems++
+        } else if (stock <= minStock) {
+          lowStockItems++
+        }
+
+        const category = product.category || "Sem categoria"
+        categoryCount[category] = (categoryCount[category] || 0) + 1
+      })
+
+      const totalProducts = snapshot.size
+      const topCategories = Object.entries(categoryCount)
+        .map(([name, count]) => ({
+          name,
+          count,
+          percentage: totalProducts > 0 ? (count / totalProducts) * 100 : 0,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+
+      console.log(`[INVENTORY FIREBASE SUCCESS] ${totalProducts} produtos, ${totalStock} unidades`)
+
+      setMetrics({
+        totalProducts,
+        totalStock,
+        lowStockItems,
+        outOfStockItems,
+        totalValue,
+        topCategories,
+      })
+    } catch (error: any) {
+      console.error("[INVENTORY FIREBASE ERROR] Erro ao buscar métricas:", error)
+      setMetrics({
+        totalProducts: 0,
+        totalStock: 0,
+        lowStockItems: 0,
+        outOfStockItems: 0,
+        totalValue: 0,
+        topCategories: [],
+      })
     } finally {
       setLoading(false)
     }

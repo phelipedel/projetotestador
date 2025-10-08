@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { TrendingUp, TrendingDown, DollarSign, CreditCard, Calendar } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -34,21 +36,71 @@ export function FinancialOverview() {
   }, [])
 
   const fetchFinancialMetrics = async () => {
+    console.log("[FINANCIAL FIREBASE] Buscando métricas financeiras")
+
+    if (!db) {
+      console.error("[FINANCIAL FIREBASE ERROR] Firebase não configurado")
+      setLoading(false)
+      return
+    }
+
     try {
-      // Simulate API call - replace with actual API
-      const mockData: FinancialMetrics = {
-        totalRevenue: 125000,
-        totalExpenses: 87500,
-        netIncome: 37500,
-        accountsReceivable: 25000,
-        accountsPayable: 15000,
-        cashFlow: 22500,
-        revenueGrowth: 12.5,
-        expenseGrowth: -3.2,
-      }
-      setMetrics(mockData)
-    } catch (error) {
-      console.error("Error fetching financial metrics:", error)
+      const transactionsRef = collection(db, "financial_transactions")
+      const snapshot = await getDocs(transactionsRef)
+
+      let totalRevenue = 0
+      let totalExpenses = 0
+      let accountsReceivable = 0
+      let accountsPayable = 0
+
+      snapshot.forEach((doc) => {
+        const transaction = doc.data()
+        const amount = transaction.amount || 0
+        const type = transaction.type
+        const status = transaction.status
+
+        if (type === "receita") {
+          if (status === "pago") {
+            totalRevenue += amount
+          } else if (status === "pendente") {
+            accountsReceivable += amount
+          }
+        } else if (type === "despesa") {
+          if (status === "pago") {
+            totalExpenses += amount
+          } else if (status === "pendente") {
+            accountsPayable += amount
+          }
+        }
+      })
+
+      const netIncome = totalRevenue - totalExpenses
+      const cashFlow = netIncome
+
+      console.log(`[FINANCIAL FIREBASE SUCCESS] Receita: R$ ${totalRevenue.toFixed(2)}, Despesas: R$ ${totalExpenses.toFixed(2)}`)
+
+      setMetrics({
+        totalRevenue,
+        totalExpenses,
+        netIncome,
+        accountsReceivable,
+        accountsPayable,
+        cashFlow,
+        revenueGrowth: 0,
+        expenseGrowth: 0,
+      })
+    } catch (error: any) {
+      console.error("[FINANCIAL FIREBASE ERROR] Erro ao buscar métricas:", error)
+      setMetrics({
+        totalRevenue: 0,
+        totalExpenses: 0,
+        netIncome: 0,
+        accountsReceivable: 0,
+        accountsPayable: 0,
+        cashFlow: 0,
+        revenueGrowth: 0,
+        expenseGrowth: 0,
+      })
     } finally {
       setLoading(false)
     }

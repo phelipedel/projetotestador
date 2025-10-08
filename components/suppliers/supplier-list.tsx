@@ -1,12 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Search, Plus, Edit, Trash2, Phone, Mail } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
 import type { Supplier } from "@/types/database"
 
 interface SupplierListProps {
@@ -18,61 +21,83 @@ export function SupplierList({ onAddSupplier, onEditSupplier }: SupplierListProp
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchSuppliers()
   }, [])
 
   const fetchSuppliers = async () => {
+    console.log("[SUPPLIERS FIREBASE] Buscando fornecedores")
+    setLoading(true)
+
+    if (!db) {
+      console.error("[SUPPLIERS FIREBASE ERROR] Firebase não configurado")
+      setLoading(false)
+      return
+    }
+
     try {
-      const mockData: Supplier[] = [
-        {
-          id: "1",
-          name: "Distribuidora ABC Ltda",
-          email: "contato@abc.com.br",
-          phone: "(11) 3456-7890",
-          document: "12.345.678/0001-90",
-          address: {
-            street: "Av. Industrial",
-            number: "1000",
-            neighborhood: "Distrito Industrial",
-            city: "São Paulo",
-            state: "SP",
-            zipCode: "01234-567",
-          },
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          createdBy: "admin",
-        },
-        {
-          id: "2",
-          name: "Fornecedor XYZ S.A.",
-          email: "vendas@xyz.com.br",
-          phone: "(11) 2345-6789",
-          document: "98.765.432/0001-10",
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          createdBy: "admin",
-        },
-      ]
-      setSuppliers(mockData)
-    } catch (error) {
-      console.error("Error fetching suppliers:", error)
+      const suppliersRef = collection(db, "suppliers")
+      const q = query(suppliersRef, orderBy("name", "asc"))
+      const querySnapshot = await getDocs(q)
+
+      console.log(`[SUPPLIERS FIREBASE SUCCESS] ${querySnapshot.size} fornecedores encontrados`)
+
+      const suppliersData: Supplier[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        suppliersData.push({
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Supplier)
+      })
+
+      setSuppliers(suppliersData)
+    } catch (error: any) {
+      console.error("[SUPPLIERS FIREBASE ERROR] Erro ao buscar fornecedores:", error)
+      toast({
+        title: "Erro ao carregar fornecedores",
+        description: error.message || "Não foi possível carregar os fornecedores.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este fornecedor?")) {
-      try {
-        console.log("Deleting supplier:", id)
-        setSuppliers(suppliers.filter((s) => s.id !== id))
-      } catch (error) {
-        console.error("Error deleting supplier:", error)
-      }
+    if (!confirm("Tem certeza que deseja excluir este fornecedor?")) return
+
+    console.log("[SUPPLIERS FIREBASE] Excluindo fornecedor:", id)
+
+    if (!db) {
+      toast({
+        title: "Erro",
+        description: "Firebase não configurado.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      await deleteDoc(doc(db, "suppliers", id))
+      console.log("[SUPPLIERS FIREBASE SUCCESS] Fornecedor excluído")
+
+      setSuppliers(suppliers.filter((s) => s.id !== id))
+      toast({
+        title: "Sucesso",
+        description: "Fornecedor excluído com sucesso.",
+      })
+    } catch (error: any) {
+      console.error("[SUPPLIERS FIREBASE ERROR] Erro ao excluir fornecedor:", error)
+      toast({
+        title: "Erro ao excluir",
+        description: error.message || "Não foi possível excluir o fornecedor.",
+        variant: "destructive",
+      })
     }
   }
 
