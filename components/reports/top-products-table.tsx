@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -23,18 +25,56 @@ export function TopProductsTable() {
   }, [])
 
   const fetchTopProducts = async () => {
+    console.log("[REPORTS FIREBASE] Buscando produtos mais vendidos")
+
+    if (!db) {
+      console.error("[REPORTS FIREBASE ERROR] Firebase não configurado")
+      setLoading(false)
+      return
+    }
+
     try {
-      // Simulate API call - replace with actual API
-      const mockData: TopProduct[] = [
-        { id: "1", name: "Smartphone XYZ", category: "Eletrônicos", quantitySold: 145, revenue: 72500, trend: "up" },
-        { id: "2", name: "Camiseta Premium", category: "Roupas", quantitySold: 234, revenue: 23400, trend: "up" },
-        { id: "3", name: "Notebook ABC", category: "Eletrônicos", quantitySold: 67, revenue: 67000, trend: "stable" },
-        { id: "4", name: "Tênis Esportivo", category: "Esportes", quantitySold: 123, revenue: 36900, trend: "down" },
-        { id: "5", name: "Livro Best Seller", category: "Livros", quantitySold: 189, revenue: 9450, trend: "up" },
-      ]
-      setProducts(mockData)
-    } catch (error) {
-      console.error("Error fetching top products:", error)
+      const salesRef = collection(db, "sales")
+      const salesSnapshot = await getDocs(salesRef)
+
+      const productStats: Record<string, { name: string; category: string; quantity: number; revenue: number }> = {}
+
+      salesSnapshot.forEach((doc) => {
+        const sale = doc.data()
+        if (sale.items && Array.isArray(sale.items)) {
+          sale.items.forEach((item: any) => {
+            const productId = item.productId || item.name
+            if (!productStats[productId]) {
+              productStats[productId] = {
+                name: item.productName || item.name,
+                category: item.category || "Sem categoria",
+                quantity: 0,
+                revenue: 0,
+              }
+            }
+            productStats[productId].quantity += item.quantity || 0
+            productStats[productId].revenue += item.total || item.price * item.quantity || 0
+          })
+        }
+      })
+
+      const topProducts: TopProduct[] = Object.entries(productStats)
+        .map(([id, stats]) => ({
+          id,
+          name: stats.name,
+          category: stats.category,
+          quantitySold: stats.quantity,
+          revenue: stats.revenue,
+          trend: "stable" as const,
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5)
+
+      console.log(`[REPORTS FIREBASE SUCCESS] ${topProducts.length} produtos principais encontrados`)
+      setProducts(topProducts)
+    } catch (error: any) {
+      console.error("[REPORTS FIREBASE ERROR] Erro ao buscar produtos:", error)
+      setProducts([])
     } finally {
       setLoading(false)
     }

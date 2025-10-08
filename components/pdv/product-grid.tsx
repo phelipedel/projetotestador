@@ -1,11 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs, query, orderBy, where } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { Search, Package } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
 import type { Product } from "@/types/database"
 
 interface ProductGridProps {
@@ -18,6 +21,7 @@ export function ProductGrid({ onAddToCart }: ProductGridProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchProducts()
@@ -28,14 +32,61 @@ export function ProductGrid({ onAddToCart }: ProductGridProps) {
   }, [products, searchTerm, selectedCategory])
 
   const fetchProducts = async () => {
+    console.log("[PDV FIREBASE] Buscando produtos para PDV")
+    setLoading(true)
+
+    if (!db) {
+      console.error("[PDV FIREBASE ERROR] Firebase não está configurado!")
+      toast({
+        title: "Erro",
+        description: "Firebase não está configurado.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
-      const response = await fetch("/api/products")
-      if (response.ok) {
-        const data = await response.json()
-        setProducts(data)
+      const productsRef = collection(db, "products")
+      const q = query(
+        productsRef,
+        where("stock", ">", 0),
+        orderBy("stock", "desc"),
+        orderBy("name", "asc")
+      )
+      const querySnapshot = await getDocs(q)
+
+      console.log(`[PDV FIREBASE SUCCESS] ${querySnapshot.size} produtos disponíveis para venda`)
+
+      const productsData: Product[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        productsData.push({
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Product)
+      })
+
+      setProducts(productsData)
+
+      if (productsData.length === 0) {
+        toast({
+          title: "Nenhum produto disponível",
+          description: "Cadastre produtos com estoque para iniciar as vendas.",
+        })
       }
-    } catch (error) {
-      console.error("Error fetching products:", error)
+    } catch (error: any) {
+      console.error("[PDV FIREBASE ERROR] Erro ao buscar produtos:", error)
+      console.error("[PDV FIREBASE ERROR] Código do erro:", error.code)
+      console.error("[PDV FIREBASE ERROR] Mensagem do erro:", error.message)
+
+      toast({
+        title: "Erro ao carregar produtos",
+        description: error.message || "Não foi possível carregar os produtos.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }

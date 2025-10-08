@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { collection, getDocs, query, where, Timestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { TrendingUp, ShoppingCart, Users, DollarSign } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -30,19 +32,52 @@ export function SalesOverview() {
   }, [])
 
   const fetchSalesMetrics = async () => {
+    console.log("[REPORTS FIREBASE] Buscando métricas de vendas")
+
+    if (!db) {
+      console.error("[REPORTS FIREBASE ERROR] Firebase não configurado")
+      setLoading(false)
+      return
+    }
+
     try {
-      // Simulate API call - replace with actual API
-      const mockData: SalesMetrics = {
-        totalSales: 1247,
-        totalRevenue: 125000,
-        averageTicket: 100.24,
-        totalCustomers: 342,
-        salesGrowth: 15.3,
-        revenueGrowth: 18.7,
-      }
-      setMetrics(mockData)
-    } catch (error) {
-      console.error("Error fetching sales metrics:", error)
+      const salesRef = collection(db, "sales")
+      const salesSnapshot = await getDocs(salesRef)
+
+      let totalRevenue = 0
+      let totalSales = salesSnapshot.size
+      const uniqueCustomers = new Set()
+
+      salesSnapshot.forEach((doc) => {
+        const data = doc.data()
+        totalRevenue += data.total || 0
+        if (data.customerId) {
+          uniqueCustomers.add(data.customerId)
+        }
+      })
+
+      const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
+
+      console.log(`[REPORTS FIREBASE SUCCESS] ${totalSales} vendas, R$ ${totalRevenue.toFixed(2)}`)
+
+      setMetrics({
+        totalSales,
+        totalRevenue,
+        averageTicket,
+        totalCustomers: uniqueCustomers.size,
+        salesGrowth: 0,
+        revenueGrowth: 0,
+      })
+    } catch (error: any) {
+      console.error("[REPORTS FIREBASE ERROR] Erro ao buscar métricas:", error)
+      setMetrics({
+        totalSales: 0,
+        totalRevenue: 0,
+        averageTicket: 0,
+        totalCustomers: 0,
+        salesGrowth: 0,
+        revenueGrowth: 0,
+      })
     } finally {
       setLoading(false)
     }
