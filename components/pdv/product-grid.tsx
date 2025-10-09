@@ -48,27 +48,33 @@ export function ProductGrid({ onAddToCart }: ProductGridProps) {
 
     try {
       const productsRef = collection(db, "products")
-      const q = query(
-        productsRef,
-        where("stock", ">", 0),
-        orderBy("stock", "desc"),
-        orderBy("name", "asc")
-      )
-      const querySnapshot = await getDocs(q)
+      const querySnapshot = await getDocs(productsRef)
 
-      console.log(`[PDV FIREBASE SUCCESS] ${querySnapshot.size} produtos disponíveis para venda`)
+      console.log(`[PDV FIREBASE] ${querySnapshot.size} produtos encontrados no total`)
 
       const productsData: Product[] = []
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        productsData.push({
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-        } as Product)
+        const stock = data.stock || 0
+
+        if (stock > 0) {
+          productsData.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+          } as Product)
+        }
       })
 
+      productsData.sort((a, b) => {
+        if (b.stock !== a.stock) {
+          return b.stock - a.stock
+        }
+        return a.name.localeCompare(b.name)
+      })
+
+      console.log(`[PDV FIREBASE SUCCESS] ${productsData.length} produtos disponíveis para venda`)
       setProducts(productsData)
 
       if (productsData.length === 0) {

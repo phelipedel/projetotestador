@@ -1,11 +1,13 @@
 "use client"
 
-import { Minus, Plus, Trash2, User } from "lucide-react"
+import { useState } from "react"
+import { Minus, Plus, Trash2, User, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { CustomerSearchModal } from "./customer-search-modal"
 import type { CartItem } from "@/hooks/use-pdv"
 import type { Customer } from "@/types/database"
 
@@ -34,6 +36,12 @@ export function ShoppingCart({
   onSetDiscount,
   onCheckout,
 }: ShoppingCartProps) {
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false)
+
+  const handleRemoveCustomer = () => {
+    onSelectCustomer(null)
+  }
+
   return (
     <Card className="h-full">
       <CardHeader>
@@ -53,9 +61,15 @@ export function ShoppingCart({
               readOnly
               className="flex-1"
             />
-            <Button variant="outline" size="sm">
-              Buscar
-            </Button>
+            {selectedCustomer ? (
+              <Button variant="outline" size="sm" onClick={handleRemoveCustomer}>
+                <X className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setShowCustomerSearch(true)}>
+                Buscar
+              </Button>
+            )}
           </div>
         </div>
 
@@ -154,6 +168,13 @@ export function ShoppingCart({
           Finalizar Venda
         </Button>
       </CardContent>
+
+      {/* Customer Search Modal */}
+      <CustomerSearchModal
+        isOpen={showCustomerSearch}
+        onClose={() => setShowCustomerSearch(false)}
+        onSelectCustomer={onSelectCustomer}
+      />
     </Card>
   )
 }
